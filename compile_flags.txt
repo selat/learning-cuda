@@ -1,0 +1,1 @@
+--cuda-gpu-arch=sm_75
