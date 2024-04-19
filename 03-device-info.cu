@@ -1,6 +1,5 @@
 #include <stdio.h>
 
-
 /*
 Print information about CUDA devices
 
@@ -42,10 +41,10 @@ int main() {
         printf("  Number of multiprocessors: %d\n", device_properties.multiProcessorCount);
         printf("  Maximum threads per block: %d\n", device_properties.maxThreadsPerBlock);
         printf("  Concurrent kernels: %d\n", device_properties.concurrentKernels);
-        printf("  Maximum dimensions of block: [%d, %d, %d]\n",
-                device_properties.maxThreadsDim[0], device_properties.maxThreadsDim[1], device_properties.maxThreadsDim[2]);
-        printf("  Maximum dimensions of grid: [%d, %d, %d]\n\n",
-                device_properties.maxGridSize[0], device_properties.maxGridSize[1], device_properties.maxGridSize[2]);
+        printf("  Maximum dimensions of block: [%d, %d, %d]\n", device_properties.maxThreadsDim[0],
+               device_properties.maxThreadsDim[1], device_properties.maxThreadsDim[2]);
+        printf("  Maximum dimensions of grid: [%d, %d, %d]\n\n", device_properties.maxGridSize[0],
+               device_properties.maxGridSize[1], device_properties.maxGridSize[2]);
 
         printf("  Total global memory: %lu bytes\n", device_properties.totalGlobalMem);
         printf("  Total constant memory: %lu bytes\n", device_properties.totalConstMem);
