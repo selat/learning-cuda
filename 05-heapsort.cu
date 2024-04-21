@@ -11,6 +11,8 @@ Heap CPU sorted in 5791.861ms
 GPU sorted in 1758.085ms, GPU time 716.513ms
 */
 
+#define THREADS_PER_BLOCK 1024
+
 typedef struct {
     int key;
     int value;
@@ -105,9 +107,9 @@ __global__ void kernelBubbleSort(int *vector, int n) {
     }
 }
 
-// Assuming than n is divisible by 512, otherwise the last block needs to be handled separately
+// Assuming than n is divisible by THREADS_PER_BLOCK, otherwise the last block needs to be handled separately
 __global__ void kernelBitonicSort(int *vector, int n) {
-    __shared__ int local_vector[512];
+    __shared__ int local_vector[THREADS_PER_BLOCK];
     unsigned int tid = threadIdx.x;
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -150,8 +152,26 @@ void heapSort(int *vector, int n) {
     }
 }
 
+void mergeOutputVector(int *vector, int *output_vector, int n, int threads_per_block, int blocks_num) {
+    PriorityQueue queue;
+    init(&queue, blocks_num);
+    for (int i = 0; i < blocks_num; ++i) {
+        push(&queue, vector[i * threads_per_block], i * threads_per_block);
+    }
+
+    for (int i = 0; i < n; ++i) {
+        PriorityQueueElement element = pop(&queue);
+
+        int next_index = element.value + 1;
+        if (next_index % threads_per_block != 0 && next_index < n) {
+            push(&queue, vector[next_index], next_index);
+        }
+        output_vector[i] = element.key;
+    }
+}
+
 int main() {
-    int n = 512 * 1000;
+    int n = 512 * 1000 * 100;
     int *vector = (int *)malloc(n * sizeof(int));
     int *heap_vector = (int *)malloc(n * sizeof(int));
     for (int i = 0; i < n; i++) {
@@ -191,33 +211,19 @@ int main() {
 
     gettimeofday(&start, NULL);
     cudaEventRecord(cuda_start);
-    const int threads_per_block = 512;
-    const int blocks_num = (n + threads_per_block - 1) / threads_per_block;
-    // kernelBubbleSort<<<blocks_num, threads_per_block>>>(gpu_vector, n);
-    kernelBitonicSort<<<blocks_num, threads_per_block>>>(gpu_vector, n);
+    const int blocks_num = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    // kernelBubbleSort<<<blocks_num, THREADS_PER_BLOCK>>>(gpu_vector, n);
+    kernelBitonicSort<<<blocks_num, THREADS_PER_BLOCK>>>(gpu_vector, n);
     cudaEventRecord(cuda_end);
     cudaError_t error = cudaDeviceSynchronize();
     if (error != cudaSuccess) {
         fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(error));
     }
 
-    PriorityQueue queue;
-    init(&queue, blocks_num);
+    printf("Blocks num %d\n", blocks_num);
+
     int *gpu_output_vector = (int *)malloc(n * sizeof(int));
-    for (int i = 0; i < blocks_num; ++i) {
-        push(&queue, gpu_vector[i * threads_per_block], i * threads_per_block);
-    }
-
-    for (int i = 0; i < n; ++i) {
-        PriorityQueueElement element = pop(&queue);
-
-        int next_index = element.value + 1;
-        if (next_index % threads_per_block != 0 && next_index < n) {
-            push(&queue, gpu_vector[next_index], next_index);
-        }
-        gpu_output_vector[i] = element.key;
-    }
-
+    mergeOutputVector(gpu_vector, gpu_output_vector, n, THREADS_PER_BLOCK, blocks_num);
     gettimeofday(&end, NULL);
 
     for (int i = 0; i < n; ++i) {
