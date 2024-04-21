@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
-
 /*
 Sort a vector using heap sort
 
@@ -24,7 +23,7 @@ typedef struct {
 } PriorityQueue;
 
 void init(PriorityQueue *queue, int max_size) {
-    queue->elements = (PriorityQueueElement*)malloc(max_size * sizeof(PriorityQueueElement));
+    queue->elements = (PriorityQueueElement *)malloc(max_size * sizeof(PriorityQueueElement));
     queue->size = 0;
     queue->max_size = max_size;
 }
@@ -78,12 +77,16 @@ PriorityQueueElement pop(PriorityQueue *queue) {
 }
 
 int compareInts(const void *a, const void *b) {
-    const int *x = (const int *) a;
-    const int *y = (const int *) b;
+    const int *x = (const int *)a;
+    const int *y = (const int *)b;
     return *x - *y;
 }
 
-__global__ void sortBlocks(int *vector, int n) {
+float getElapsedMilliseconds(struct timeval* start, struct timeval* end) {
+    return (end->tv_sec - start->tv_sec) * 1000.0 + (end->tv_usec - start->tv_usec) / 1000.0;
+}
+
+__global__ void kernelBubbleSort(int *vector, int n) {
     if (threadIdx.x == 0) {
         int range_start = blockDim.x * blockIdx.x;
         int range_end = blockDim.x * (blockIdx.x + 1);
@@ -102,6 +105,40 @@ __global__ void sortBlocks(int *vector, int n) {
     }
 }
 
+// Assuming than n is divisible by 512, otherwise the last block needs to be handled separately
+__global__ void kernelBitonicSort(int *vector, int n) {
+    __shared__ int local_vector[512];
+    unsigned int tid = threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    local_vector[tid] = vector[idx];
+    __syncthreads();
+
+    for (unsigned int k = 2; k <= blockDim.x; k *= 2) {
+        for (unsigned int j = k / 2; j > 0; j /= 2) {
+            unsigned int ixj = tid ^ j;
+            if (ixj > tid) {
+                if ((tid & k) == 0) {
+                    if (local_vector[tid] > local_vector[ixj]) {
+                        int temp = local_vector[tid];
+                        local_vector[tid] = local_vector[ixj];
+                        local_vector[ixj] = temp;
+                    }
+                } else {
+                    if (local_vector[tid] < local_vector[ixj]) {
+                        int temp = local_vector[tid];
+                        local_vector[tid] = local_vector[ixj];
+                        local_vector[ixj] = temp;
+                    }
+                }
+            }
+            __syncthreads();
+        }
+    }
+
+    vector[idx] = local_vector[tid];
+}
+
 void heapSort(int *vector, int n) {
     PriorityQueue queue;
     init(&queue, n);
@@ -114,11 +151,11 @@ void heapSort(int *vector, int n) {
 }
 
 int main() {
-    int n = 50 * 1000;
-    int *vector = (int*)malloc(n * sizeof(int));
-    int *heap_vector = (int*)malloc(n * sizeof(int));
+    int n = 512 * 1000;
+    int *vector = (int *)malloc(n * sizeof(int));
+    int *heap_vector = (int *)malloc(n * sizeof(int));
     for (int i = 0; i < n; i++) {
-        vector[i] = rand() % 100;
+        vector[i] = rand();
         heap_vector[i] = vector[i];
     }
 
@@ -134,16 +171,12 @@ int main() {
     qsort(vector, n, sizeof(int), compareInts);
     gettimeofday(&end, NULL);
 
-    double elapsed_milliseconds =
-        (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
-    printf("qsort CPU sorted in %.3fms\n", elapsed_milliseconds);
+    printf("qsort CPU sorted in %.3fms\n", getElapsedMilliseconds(&start, &end));
 
     gettimeofday(&start, NULL);
     heapSort(heap_vector, n);
     gettimeofday(&end, NULL);
-    elapsed_milliseconds =
-        (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
-    printf("Heap CPU sorted in %.3fms\n", elapsed_milliseconds);
+    printf("Heap CPU sorted in %.3fms\n", getElapsedMilliseconds(&start, &end));
 
     for (int i = 0; i < n; ++i) {
         if (vector[i] != heap_vector[i]) {
@@ -160,7 +193,8 @@ int main() {
     cudaEventRecord(cuda_start);
     const int threads_per_block = 512;
     const int blocks_num = (n + threads_per_block - 1) / threads_per_block;
-    sortBlocks<<<blocks_num, threads_per_block>>>(gpu_vector, n);
+    // kernelBubbleSort<<<blocks_num, threads_per_block>>>(gpu_vector, n);
+    kernelBitonicSort<<<blocks_num, threads_per_block>>>(gpu_vector, n);
     cudaEventRecord(cuda_end);
     cudaError_t error = cudaDeviceSynchronize();
     if (error != cudaSuccess) {
@@ -169,7 +203,7 @@ int main() {
 
     PriorityQueue queue;
     init(&queue, blocks_num);
-    int *gpu_output_vector = (int*)malloc(n * sizeof(int));
+    int *gpu_output_vector = (int *)malloc(n * sizeof(int));
     for (int i = 0; i < blocks_num; ++i) {
         push(&queue, gpu_vector[i * threads_per_block], i * threads_per_block);
     }
@@ -196,9 +230,7 @@ int main() {
     float gpu_milliseconds = 0;
     cudaEventElapsedTime(&gpu_milliseconds, cuda_start, cuda_end);
 
-    elapsed_milliseconds =
-        (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
-    printf("GPU sorted in %.3fms, GPU time %.3fms\n", elapsed_milliseconds, gpu_milliseconds);
+    printf("GPU sorted in %.3fms, GPU time %.3fms\n", getElapsedMilliseconds(&start, &end), gpu_milliseconds);
 
     free(gpu_output_vector);
     cudaFree(gpu_vector);
