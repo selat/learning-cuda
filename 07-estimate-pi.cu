@@ -30,7 +30,7 @@ int main() {
     int n = 1000 * 1000;
 
     unsigned long long *count;
-    cudaMallocManaged(&count, sizeof(int));
+    cudaMallocManaged(&count, sizeof(unsigned long long));
     *count = 0;
 
     const int blocks_num = 10000;
