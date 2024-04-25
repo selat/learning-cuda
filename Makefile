@@ -1,2 +1,2 @@
 %: %.cu
-	nvcc -O3 $< -o main
+	nvcc -O3 -lcublas $< -o main

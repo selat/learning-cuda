@@ -1,8 +1,14 @@
+#include <cublas_v2.h>
 #include <stdio.h>
 #include <sys/time.h>
 
 /*
 Multiply two matrices
+
+Example output:
+GPU multiplied in 140.395 milliseconds
+cuBLAS multiplied in 27.818 milliseconds
+CPU multiplied in 88440.844 milliseconds
 */
 __global__ void multiplyMatrices(float *matrix_a, float *matrix_b, float *matrix_c, int rows_a,
                                  int cols_a, int cols_b) {
@@ -16,6 +22,10 @@ __global__ void multiplyMatrices(float *matrix_a, float *matrix_b, float *matrix
         }
         matrix_c[row * cols_b + col] = sum;
     }
+}
+
+float getElapsedMilliseconds(struct timeval *start, struct timeval *end) {
+    return (end->tv_sec - start->tv_sec) * 1000.0 + (end->tv_usec - start->tv_usec) / 1000.0;
 }
 
 float *allocateGPUMatrix(int rows, int cols) {
@@ -67,6 +77,9 @@ void cpuMultiplyMatrices(float *matrix_a, float *matrix_b, float *matrix_c, int 
 }
 
 void testGPUMultiplication(int n) {
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+
     float *matrix_a = allocateGPUMatrix(n, n);
     float *matrix_b = allocateGPUMatrix(n, n);
     float *matrix_c = allocateGPUMatrix(n, n);
@@ -88,17 +101,37 @@ void testGPUMultiplication(int n) {
 
     // Takes just 3ms for n=1000
     multiplyMatrices<<<grid_dim, block_dim>>>(matrix_a, matrix_b, matrix_c, n, n, n);
-
     cudaEventRecord(multiplication_end);
-    cudaDeviceSynchronize();
-
+    cudaError_t error = cudaDeviceSynchronize();
+    if (error != cudaSuccess) {
+        fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(error));
+    }
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, multiplication_start, multiplication_end);
     printf("GPU multiplied in %.3f milliseconds\n", milliseconds);
 
     if (n < 10) {
+        printf("\nMatrix A\n");
+        printMatrix(matrix_a, n, n);
+        printf("\nMatrix B\n");
+        printMatrix(matrix_b, n, n);
+        printf("\nMatrix C\n");
         printMatrix(matrix_c, n, n);
     }
+
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
+    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, matrix_a, n, matrix_b, n, &beta,
+                matrix_c, n);
+    error = cudaDeviceSynchronize();
+    if (error != cudaSuccess) {
+        fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(error));
+    }
+    gettimeofday(&end, NULL);
+
+    printf("cuBLAS multiplied in %.3f milliseconds\n", getElapsedMilliseconds(&start, &end));
 
     // Let's be nice and clean up
     cudaEventDestroy(multiplication_start);
@@ -107,6 +140,7 @@ void testGPUMultiplication(int n) {
     cudaFree(matrix_a);
     cudaFree(matrix_b);
     cudaFree(matrix_c);
+    cublasDestroy(handle);
 }
 
 void testCPUMultiplication(int n) {
@@ -124,9 +158,7 @@ void testCPUMultiplication(int n) {
     cpuMultiplyMatrices(matrix_a, matrix_b, matrix_c, n, n, n);
     gettimeofday(&end, NULL);
 
-    double elapsed_milliseconds =
-        (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
-    printf("CPU multiplied in %.3f milliseconds\n", elapsed_milliseconds);
+    printf("CPU multiplied in %.3f milliseconds\n", getElapsedMilliseconds(&start, &end));
 
     free(matrix_a);
     free(matrix_b);
@@ -134,7 +166,7 @@ void testCPUMultiplication(int n) {
 }
 
 int main() {
-    int n = 1000;
+    int n = 5000;
 
     testGPUMultiplication(n);
     testCPUMultiplication(n);
