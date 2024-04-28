@@ -50,6 +50,10 @@ int main() {
         return 1;
     }
 
+    int width, height;
+    SDL_GetWindowSize(window, &width, &height);
+    printf("%d x %d", width, height);
+
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     GLenum status = glewInit();
     if (status != GLEW_OK) {
@@ -57,6 +61,7 @@ int main() {
         return 1;
     }
 
+    glEnable(GL_PROGRAM_POINT_SIZE);
     glDisable(GL_DEPTH_TEST);
 
     GLuint vertex_shader = createShader(GL_VERTEX_SHADER, "09-n-body-problem-vertex.glsl");
@@ -83,15 +88,6 @@ int main() {
     }
 
     glUseProgram(gl_program);
-    GLfloat centers[] = {
-        0.0, 0.0
-    };
-    GLfloat radii[] = {
-        0.05
-    };
-    // glUniform2fv(glGetUniformLocation(gl_program, "centers"), 1, centers);
-    // glUniform1fv(glGetUniformLocation(gl_program, "radii"), 1, radii);
-    // glUniform1i(glGetUniformLocation(gl_program, "num_circles"), 1);
 
     GLuint vertex_array;
     glGenVertexArrays(1, &vertex_array);
@@ -99,14 +95,11 @@ int main() {
 
     GLuint vertex_buffer;
     glGenBuffers(1, &vertex_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-    GLfloat vertices[] = {0.0f, 0.0f};
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (void*)0);
     glEnableVertexAttribArray(0);
 
     SDL_Event event;
     bool is_running = true;
+    int x_location = 0;
     while (is_running) {
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -119,6 +112,21 @@ int main() {
         glClearColor(1.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
+
+        GLfloat centers[] = {
+            (GLfloat)x_location, 256.0
+        };
+        x_location++;
+        GLfloat radii[] = {
+            100
+        };
+        glUniform2fv(glGetUniformLocation(gl_program, "centers"), 1, centers);
+        glUniform1fv(glGetUniformLocation(gl_program, "radii"), 1, radii);
+        glUniform1i(glGetUniformLocation(gl_program, "num_circles"), 1);
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+        GLfloat vertices[] = {((GLfloat)x_location - 256) / 256.0f, 0.0f};
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (void*)0);
         glDrawArrays(GL_POINTS, 0, 1);
         GLenum error = glGetError();
         if (error != GL_NO_ERROR) {
