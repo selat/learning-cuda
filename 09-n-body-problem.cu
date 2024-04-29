@@ -52,7 +52,7 @@ int main() {
 
     int width, height;
     SDL_GetWindowSize(window, &width, &height);
-    printf("%d x %d", width, height);
+    printf("%d x %d\n", width, height);
 
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     GLenum status = glewInit();
@@ -61,6 +61,7 @@ int main() {
         return 1;
     }
 
+    glEnable(GL_POINT_SPRITE);
     glEnable(GL_PROGRAM_POINT_SIZE);
     glDisable(GL_DEPTH_TEST);
 
@@ -112,22 +113,12 @@ int main() {
         glClearColor(1.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
-
-        GLfloat centers[] = {
-            (GLfloat)x_location, 256.0
-        };
         x_location++;
-        GLfloat radii[] = {
-            100
-        };
-        glUniform2fv(glGetUniformLocation(gl_program, "centers"), 1, centers);
-        glUniform1fv(glGetUniformLocation(gl_program, "radii"), 1, radii);
-        glUniform1i(glGetUniformLocation(gl_program, "num_circles"), 1);
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-        GLfloat vertices[] = {((GLfloat)x_location - 256) / 256.0f, 0.0f};
+        GLfloat vertices[] = {((GLfloat)x_location - 256) / 256.0f, 0.0f, 0.0f, 0.0f};
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (void*)0);
-        glDrawArrays(GL_POINTS, 0, 1);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)0);
+        glDrawArrays(GL_POINTS, 0, 2);
         GLenum error = glGetError();
         if (error != GL_NO_ERROR) {
             printf("GL error: %d\n", error);
