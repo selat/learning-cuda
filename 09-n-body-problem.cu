@@ -125,7 +125,7 @@ int main() {
     glGenBuffers(1, &vertex_buffer);
     glEnableVertexAttribArray(0);
 
-    const int n = 2000;
+    const int n = 10000;
     float2 *coords, *velocities;
     cudaMallocManaged(&coords, n * sizeof(float2));
     cudaMallocManaged(&velocities, n * sizeof(float2));
