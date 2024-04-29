@@ -17,26 +17,20 @@ __global__ void kernelNBodyEstimateEuler(int num, float2 coords[], float2 veloci
 
     float2 cur_coord = coords[id];
     float2 acceleration = make_float2(0.0f, 0.0f);
+    float eps = 0.001f;
     for (int i = 0; i < num; ++i) {
         if (i != id) {
             float cur_distance = distance(coords[i], cur_coord);
             float2 shift = make_float2(coords[i].x - cur_coord.x, coords[i].y - cur_coord.y);
-            shift.x /= (cur_distance * cur_distance);
-            shift.y /= (cur_distance * cur_distance);
+            shift.x /= (cur_distance * cur_distance + eps);
+            shift.y /= (cur_distance * cur_distance + eps);
             acceleration.x += shift.x;
             acceleration.y += shift.y;
         }
     }
-    float dt = 0.001;
+    float dt = 0.0001;
 
-    if (acceleration.x > 1.0f) {
-        acceleration.x = 1.0f;
-    }
     velocities[id].x += acceleration.x * dt;
-
-    if (acceleration.y > 1.0f) {
-        acceleration.y = 1.0f;
-    }
     velocities[id].y += acceleration.y * dt;
 }
 
@@ -77,7 +71,7 @@ int main() {
     SDL_Init(SDL_INIT_VIDEO);
 
     SDL_Window *window = SDL_CreateWindow("N body simulation", SDL_WINDOWPOS_CENTERED,
-                                          SDL_WINDOWPOS_CENTERED, 512, 512, SDL_WINDOW_OPENGL);
+                                          SDL_WINDOWPOS_CENTERED, 1024, 1024, SDL_WINDOW_OPENGL);
     if (window == NULL) {
         fprintf(stderr, "Failed to create window: %s", SDL_GetError());
         return 1;
@@ -131,7 +125,7 @@ int main() {
     glGenBuffers(1, &vertex_buffer);
     glEnableVertexAttribArray(0);
 
-    const int n = 100;
+    const int n = 2000;
     float2 *coords, *velocities;
     cudaMallocManaged(&coords, n * sizeof(float2));
     cudaMallocManaged(&velocities, n * sizeof(float2));
@@ -159,7 +153,7 @@ int main() {
         if (cuda_error != cudaSuccess) {
             fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(cuda_error));
         }
-        const float dt = 0.001;
+        const float dt = 0.0001;
         for (int i = 0; i < n; ++i) {
             coords[i].x += velocities[i].x * dt;
             coords[i].y += velocities[i].y * dt;
