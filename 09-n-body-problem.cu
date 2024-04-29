@@ -7,6 +7,39 @@
 
 char glsl_log[GLSL_PROGRAM_LOG_SIZE];
 
+__device__
+float distance(float2 p1, float2 p2) {
+    return sqrtf((p2.x - p1.x)*(p2.x - p1.x) + (p2.y - p1.y)*(p2.y - p1.y));
+}
+
+__global__ void kernelNBodyEstimateEuler(int num, float2 coords[], float2 velocities[]) {
+    int id = blockIdx.x;
+
+    float2 cur_coord = coords[id];
+    float2 acceleration = make_float2(0.0f, 0.0f);
+    for (int i = 0; i < num; ++i) {
+        if (i != id) {
+            float cur_distance = distance(coords[i], cur_coord);
+            float2 shift = make_float2(coords[i].x - cur_coord.x, coords[i].y - cur_coord.y);
+            shift.x /= (cur_distance * cur_distance);
+            shift.y /= (cur_distance * cur_distance);
+            acceleration.x += shift.x;
+            acceleration.y += shift.y;
+        }
+    }
+    float dt = 0.001;
+
+    if (acceleration.x > 1.0f) {
+        acceleration.x = 1.0f;
+    }
+    velocities[id].x += acceleration.x * dt;
+
+    if (acceleration.y > 1.0f) {
+        acceleration.y = 1.0f;
+    }
+    velocities[id].y += acceleration.y * dt;
+}
+
 GLuint createShader(GLenum type, const char *file_name) {
     printf("Loading %-32s", file_name);
     GLuint shader = glCreateShader(type);
@@ -98,9 +131,20 @@ int main() {
     glGenBuffers(1, &vertex_buffer);
     glEnableVertexAttribArray(0);
 
+    const int n = 100;
+    float2 *coords, *velocities;
+    cudaMallocManaged(&coords, n * sizeof(float2));
+    cudaMallocManaged(&velocities, n * sizeof(float2));
+
+    for (int i = 0; i < n; ++i) {
+        coords[i].x = cos(float(i) / n * 2.0 * M_PI) * 0.5f;
+        coords[i].y = sin(float(i) / n * 2.0 * M_PI) * 0.5f;
+        velocities[i].x = 0.0f;
+        velocities[i].y = 0.0f;
+    }
+
     SDL_Event event;
     bool is_running = true;
-    int x_location = 0;
     while (is_running) {
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -110,15 +154,24 @@ int main() {
             }
         }
 
+        kernelNBodyEstimateEuler<<<n, 1>>>(n, coords, velocities);
+        cudaError_t cuda_error = cudaDeviceSynchronize();
+        if (cuda_error != cudaSuccess) {
+            fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(cuda_error));
+        }
+        const float dt = 0.001;
+        for (int i = 0; i < n; ++i) {
+            coords[i].x += velocities[i].x * dt;
+            coords[i].y += velocities[i].y * dt;
+        }
+
         glClearColor(0.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        x_location++;
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-        GLfloat vertices[] = {((GLfloat)x_location - 256) / 256.0f, 0.0f, 0.0f, 0.0f};
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)0);
-        glDrawArrays(GL_POINTS, 0, 2);
+        glBufferData(GL_ARRAY_BUFFER, n * sizeof(float2), (GLfloat*)coords, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+        glDrawArrays(GL_POINTS, 0, n);
         GLenum error = glGetError();
         if (error != GL_NO_ERROR) {
             printf("GL error: %d\n", error);
