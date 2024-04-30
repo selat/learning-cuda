@@ -3,6 +3,9 @@
 #include <SDL2/SDL_video.h>
 #include <stdio.h>
 
+#define PRESET_CIRCLE 1
+#define PRESET_BIG_BANG 2
+
 #define GLSL_PROGRAM_LOG_SIZE 2028
 
 char glsl_log[GLSL_PROGRAM_LOG_SIZE];
@@ -67,7 +70,47 @@ GLuint createShader(GLenum type, const char *file_name) {
     return shader;
 }
 
-int main() {
+// Visible on display X and Y coordinates are in range [-1; 1]
+void initPreset(int preset, const int n, float2* coords, float2* velocities) {
+    if (preset == PRESET_CIRCLE) {
+        for (int i = 0; i < n; ++i) {
+            coords[i].x = cos(float(i) / n * 2.0 * M_PI) * 0.5f;
+            coords[i].y = sin(float(i) / n * 2.0 * M_PI) * 0.5f;
+            velocities[i].x = 0.0f;
+            velocities[i].y = 0.0f;
+        }
+    } else if (preset == PRESET_BIG_BANG) {
+        const float starting_velocity = 180.0f;
+        for (int i = 0; i < n; ++i) {
+            coords[i].x = 0.0f;
+            coords[i].y = 0.0f;
+            velocities[i].x = cos(float(i) / n * 2.0 * M_PI) * starting_velocity;
+            velocities[i].y = sin(float(i) / n * 2.0 * M_PI) * starting_velocity;
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    int preset = PRESET_CIRCLE;
+    if (argc == 3) {
+        if (strcmp(argv[1], "--preset") == 0) {
+            const char* preset_name = argv[2];
+            if (strcmp(preset_name, "circle") == 0) {
+                preset = PRESET_CIRCLE;
+            } else if (strcmp(preset_name, "bigbang") == 0) {
+                preset = PRESET_BIG_BANG;
+            } else {
+                fprintf(stderr, "Unknown preset: %s\n", preset_name);
+            }
+        } else {
+            fprintf(stderr, "Unknown argument: %s\n", argv[1]);
+            return EXIT_FAILURE;
+        }
+    } else if (argc != 1) {
+        fprintf(stderr, "Unexpected number of arguments. Supported flags: --preset [circle, bigbang]\n");
+        return EXIT_FAILURE;
+    }
+
     SDL_Init(SDL_INIT_VIDEO);
 
     SDL_Window *window = SDL_CreateWindow("N body simulation", SDL_WINDOWPOS_CENTERED,
@@ -130,12 +173,7 @@ int main() {
     cudaMallocManaged(&coords, n * sizeof(float2));
     cudaMallocManaged(&velocities, n * sizeof(float2));
 
-    for (int i = 0; i < n; ++i) {
-        coords[i].x = cos(float(i) / n * 2.0 * M_PI) * 0.5f;
-        coords[i].y = sin(float(i) / n * 2.0 * M_PI) * 0.5f;
-        velocities[i].x = 0.0f;
-        velocities[i].y = 0.0f;
-    }
+    initPreset(preset, n, coords, velocities);
 
     SDL_Event event;
     bool is_running = true;
