@@ -83,9 +83,9 @@ int main(int argc, char** argv) {
     dim3 grid_dim(width / block_size, height / block_size, 1);
     dim3 block_dim(block_size, block_size, 1);
 
-    cudaEvent_t multiplication_start, multiplication_end;
-    cudaEventCreate(&multiplication_start);
-    cudaEventCreate(&multiplication_end);
+    cudaEvent_t kernel_start, kernel_end;
+    cudaEventCreate(&kernel_start);
+    cudaEventCreate(&kernel_end);
 
     SDL_Event event;
     bool is_running = true;
@@ -99,16 +99,16 @@ int main(int argc, char** argv) {
             }
         }
 
-        cudaEventRecord(multiplication_start);
+        cudaEventRecord(kernel_start);
         kernelJuliaSet<<<grid_dim, block_dim>>>(scale, width, height, device_buffer);
-        cudaEventRecord(multiplication_end);
+        cudaEventRecord(kernel_end);
         cudaError_t error = cudaDeviceSynchronize();
         if (error != cudaSuccess) {
             fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(error));
         }
 
         float milliseconds;
-        cudaEventElapsedTime(&milliseconds, multiplication_start, multiplication_end);
+        cudaEventElapsedTime(&milliseconds, kernel_start, kernel_end);
         printf("Scale %f rendered in %.3f milliseconds\n", scale, milliseconds);
         cudaMemcpy(window_surface->pixels, device_buffer, sizeof(uint32_t) * width * height, cudaMemcpyDeviceToHost);
 
@@ -116,5 +116,9 @@ int main(int argc, char** argv) {
 
         scale *= 0.9995f;
     }
+
+    cudaEventDestroy(kernel_start);
+    cudaEventDestroy(kernel_end);
+    cudaFree(device_buffer);
     return 0;
 }
