@@ -35,7 +35,7 @@ __device__ bool juliaValue(float x, float y, float scale) {
     int iterations_num = 200 + 80 * logf(1 / scale);
     for (int i = 0; i < iterations_num; ++i) {
         a = a * a + c;
-        if (a.magnitude2() > 1000.0f) {
+        if (a.magnitude2() > 10.0f) {
             return false;
         }
     }
