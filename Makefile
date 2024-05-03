@@ -4,5 +4,8 @@
 10-julia-set: 10-julia-set.cu
 	nvcc 10-julia-set.cu -lSDL2 -o main
 
+11-ripple-animation: 11-ripple-animation.cu
+	nvcc 11-ripple-animation.cu -lSDL2 -o main
+
 %: %.cu
 	nvcc -O3 -lcublas $< -o main
