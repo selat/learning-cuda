@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 
-#define THREADS_PER_BLOCK 1024
+#define THREADS_PER_BLOCK 256
 
 #define HANDLE_CUDA_ERROR(expression)                                                              \
     {                                                                                              \
@@ -19,10 +19,18 @@ Calculate the dot product of two vectors
 
 Example output:
 N = 200000000
+THREADS_PER_BLOCK = 1024
 Dot product: 800000000.000000
-Computed in 7.827 milliseconds
+Computed in 7.828 milliseconds
 Dot product: 800000000.000000
-Hierarchical computed in 1.946 milliseconds
+Hierarchical computed in 1.942 milliseconds
+
+N = 200000000
+THREADS_PER_BLOCK = 256
+Dot product: 800000000.000000
+Computed in 2.115 milliseconds
+Dot product: 800000000.000000
+Hierarchical computed in 1.847 milliseconds
 */
 __global__ void vectorDotProduct(float *vector_a, float *vector_b, float *block_result, int n) {
     __shared__ float partial_sums[THREADS_PER_BLOCK];
@@ -102,6 +110,7 @@ int main() {
     int sums_blocks_num = (blocks_num + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
     printf("N = %d\n", n);
+    printf("THREADS_PER_BLOCK = %d\n", THREADS_PER_BLOCK);
 
     float *vector_a = (float *)malloc(n * sizeof(float));
     float *vector_b = (float *)malloc(n * sizeof(float));
