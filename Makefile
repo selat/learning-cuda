@@ -7,5 +7,8 @@
 11-ripple-animation: 11-ripple-animation.cu
 	nvcc 11-ripple-animation.cu -lSDL2 -o main
 
+12-ray-tracing-spheres: 12-ray-tracing-spheres.cu
+	nvcc 12-ray-tracing-spheres.cu -lSDL2 -o main
+
 %: %.cu
 	nvcc -O3 -lcublas $< -o main
