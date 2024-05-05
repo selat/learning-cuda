@@ -1,6 +1,17 @@
+#include <cstdlib>
 #include <stdio.h>
 
 #define THREADS_PER_BLOCK 1024
+
+#define HANDLE_CUDA_ERROR(expression)                                                              \
+    {                                                                                              \
+        cudaError_t error = (expression);                                                          \
+        if (error != cudaSuccess) {                                                                \
+            fprintf(stderr, "CUDA error at %s:%d: %s\n", (__FILE__), (__LINE__),                   \
+                    cudaGetErrorString(error));                                                    \
+            exit(1);                                                                               \
+        }                                                                                          \
+    }
 
 /*
 Calculate the dot product of two vectors
@@ -76,36 +87,40 @@ __global__ void vectorSum(float *a, float *block_result, int n) {
 
 int main() {
     int n = 200000000;
-
-    float *vector_a, *vector_b, *block_result, *sums;
-    cudaMallocManaged(&vector_a, n * sizeof(float));
-    cudaMallocManaged(&vector_b, n * sizeof(float));
     int blocks_num = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-    cudaMallocManaged(&block_result, blocks_num * sizeof(float));
     int sums_blocks_num = (blocks_num + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-    cudaMallocManaged(&sums, sums_blocks_num * sizeof(float));
 
+    float *vector_a = (float *)malloc(n * sizeof(float));
+    float *vector_b = (float *)malloc(n * sizeof(float));
     for (int i = 0; i < n; i++) {
         vector_a[i] = 2;
         vector_b[i] = 2;
     }
+
+    float *sums = (float *)malloc(sums_blocks_num * sizeof(float));
+
+    float *dev_vector_a, *dev_vector_b, *dev_block_result, *dev_sums;
+    HANDLE_CUDA_ERROR(cudaMalloc(&dev_vector_a, n * sizeof(float)));
+    HANDLE_CUDA_ERROR(cudaMalloc(&dev_vector_b, n * sizeof(float)));
+    HANDLE_CUDA_ERROR(cudaMalloc(&dev_block_result, blocks_num * sizeof(float)));
+    HANDLE_CUDA_ERROR(cudaMalloc(&dev_sums, sums_blocks_num * sizeof(float)));
 
     cudaEvent_t start, end;
     cudaEventCreate(&start);
     cudaEventCreate(&end);
 
     cudaEventRecord(start);
-    vectorDotProduct<<<blocks_num, THREADS_PER_BLOCK>>>(vector_a, vector_b, block_result, n);
-    cudaError_t error = cudaDeviceSynchronize();
-    if (error != cudaSuccess) {
-        fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(error));
-    }
+    HANDLE_CUDA_ERROR(
+        cudaMemcpy(dev_vector_a, vector_a, n * sizeof(float), cudaMemcpyHostToDevice));
+    HANDLE_CUDA_ERROR(
+        cudaMemcpy(dev_vector_b, vector_b, n * sizeof(float), cudaMemcpyHostToDevice));
+    vectorDotProduct<<<blocks_num, THREADS_PER_BLOCK>>>(dev_vector_a, dev_vector_b,
+                                                        dev_block_result, n);
+    HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
 
-    vectorSum<<<sums_blocks_num, THREADS_PER_BLOCK>>>(block_result, sums, blocks_num);
-    error = cudaDeviceSynchronize();
-    if (error != cudaSuccess) {
-        fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(error));
-    }
+    vectorSum<<<sums_blocks_num, THREADS_PER_BLOCK>>>(dev_block_result, dev_sums, blocks_num);
+    HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
+    HANDLE_CUDA_ERROR(cudaMemcpy(sums, dev_sums, sums_blocks_num * sizeof(float), cudaMemcpyDeviceToHost));
 
     float result = 0.0f;
     for (int i = 0; i < sums_blocks_num; i++) {
@@ -119,5 +134,9 @@ int main() {
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, end);
     printf("Computed in %.3f milliseconds\n", milliseconds);
+
+    cudaEventDestroy(end);
+    cudaEventDestroy(start);
+
     return 0;
 }
