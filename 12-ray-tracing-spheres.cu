@@ -134,13 +134,16 @@ int main(int argc, char **argv) {
     }
     HANDLE_CUDA_ERROR(cudaMemcpy(device_spheres, spheres, n * sizeof(Sphere), cudaMemcpyHostToDevice));
 
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     const int block_size = 16;
     dim3 grid_dim(width / block_size, height / block_size, 1);
     dim3 block_dim(block_size, block_size, 1);
 
     SDL_Event event;
     bool is_running = true;
-    int tick = 0;
     while (is_running) {
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -150,17 +153,23 @@ int main(int argc, char **argv) {
             }
         }
 
+        cudaEventRecord(start);
         kernelMoveSpheres<<<n, 1>>>(device_spheres);
         kernelRayTracingSpheres<<<grid_dim, block_dim>>>(n, device_spheres, width, height, device_buffer);
-        HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
-
         HANDLE_CUDA_ERROR(cudaMemcpy(window_surface->pixels, device_buffer,
                                      sizeof(uint32_t) * width * height, cudaMemcpyDeviceToHost));
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+
+        float milliseconds = 0;
+        cudaEventElapsedTime(&milliseconds, start, stop);
+        printf("Rendered in %.3f ms\n", milliseconds);
 
         SDL_UpdateWindowSurface(window);
-
-        ++tick;
     }
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     cudaFree(device_buffer);
     cudaFree(device_spheres);
