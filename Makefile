@@ -10,5 +10,8 @@
 12-ray-tracing-spheres: 12-ray-tracing-spheres.cu
 	nvcc 12-ray-tracing-spheres.cu -lSDL2 -o main
 
+13-heat-transfer: 13-heat-transfer.cu
+	nvcc 13-heat-transfer.cu -lSDL2 -o main
+
 %: %.cu
 	nvcc -O3 -lcublas $< -o main
